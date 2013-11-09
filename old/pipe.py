@@ -6,7 +6,9 @@ import loader
 
 
 
-gmode = len(sys.argv) > 1 and sys.argv[1].startswith('g') and sys.argv[1] or ''
+# gmode = len(sys.argv) > 1 and sys.argv[1].startswith('g') and sys.argv[1] or ''
+gmode = len(sys.argv) > 1 and sys.argv[1] or ''
+
 
 
 # old

@@ -72,7 +72,7 @@ class C5:
 
         count = 0
         for key,value in output.items():
-            if not value:
+            if value is None or value == '':
                 # vai tas ir atļauts iterāciju laikā ?
                 output[key] = self.features.NONE
                 continue
@@ -82,6 +82,8 @@ class C5:
                 elif count != len(value):
                     print('ERROR: feature output length (name=%s) length mismatch, expected %i, got %i' % (key,count,len(value)))
                     return False
+            if type(value) == int or type(value) == float:
+                output[key] = str(value)
 
         if count == 0:
             print(','.join(self.escape(output[feature.name]) for feature in self.features), ',', _class, '.', sep='', file=self.datafile)
@@ -172,13 +174,20 @@ class C5:
                     rule = Dict(conditionCount=params.conds, conditions=[],
                             className=params['class'], cover=params.cover, ok=params.ok, lift=params.lift)
                 elif rule:
-                    operation = operations[int(params.type)]
+                    if int(params.type) == 2:
+                        operation = params.result
+                        if operation == '<':
+                            operation = '<='
+                    else:
+                        operation = operations[int(params.type)]
                     if operation.endswith('?'):
                         print('Warning: unknown operation type:', operation)
                         # print('Warning: unknown operation type:', params.type)
                     condition = Dict(name=params.att, operation=operation)
                     if int(params.type) == 3:
                         condition.value = params.elts
+                    elif int(params.type) == 2:
+                        condition.value = int(params.cut)
                     else:
                         condition.value = params.val
                     rule.conditions.append(condition)
@@ -210,6 +219,9 @@ class C5:
     def generate(self, indent=4, file=sys.stdout, skipNOrules=True):
 
         def quote(s):
+
+            if type(s) == int or type(s) == float:
+                return str(s)
             # print(type(s))
             if type(s) == str:
                 s = s.replace('"', '\\"').replace('\\', '\\\\')
@@ -219,6 +231,13 @@ class C5:
             #     return '('+','.join(quote(x) for x in s)+')'
             # return str(s)
 
+        def prep(s):
+            if type(s) == str:
+                return s
+            if type(s) == int or type(s) == float:
+                return str(s)
+            return '('+','.join(x for x in s)+')'
+
         # Original C5.0 output sample:
         # Rule 146: (15, lift 1.0)
         #     lemma = savukārt
@@ -227,28 +246,43 @@ class C5:
         indent = ' ' * indent
 
         print(file=file)
-        print(indent+'rules = []', file=file)
-        print(file=file)
+        # print(indent+'rules = []', file=file)
+        # print(file=file)
 
         for rule in self.rules:
 
             if rule.className != "YES":
                 continue
 
+            # if float(rule.ok) / float(rule.cover) < 0.4:
+            #     continue
+
             # print comment
-            print(indent+'# Rule:', rule.ok, 'of', rule.cover, 'OK', file=file)
+            # print(indent+'# Rule:', rule.ok, 'of', rule.cover, 'OK', file=file)
+            # for condition in rule.conditions:
+            #     print(indent+'#    ', condition.name, condition.operation, quote(condition.value), file=file)
+            # print(indent+'#     ->', rule.className, '[%.3f]' % (float(rule.lift) / 100), file=file)
+            print(indent+'# Coverage:', rule.ok, 'of', rule.cover, 'ok', '[%.3f]' % (float(rule.lift) / 100), file=file)
             for condition in rule.conditions:
-                print(indent+'#    ', condition.name, condition.operation, quote(condition.value), file=file)
-            print(indent+'#     ->', rule.className, '[%.3f]' % (float(rule.lift) / 100), file=file)
+                condop = condition.operation
+                if condop == '==':
+                    condop = '='
+                print(indent+'#    ', condition.name, condop, prep(condition.value), file=file)
+                # print(indent+'#    ', condition.name, condition.operation, prep(condition.value), file=file)
+                # print(indent+'#    ', condition.name, condition.operation, quote(condition.value), file=file)
+            # print(indent+'#     ->', rule.className, '[%.3f]' % (float(rule.lift) / 100), file=file)
 
             # print python if-rule code
             # print(condition)
             # print(condition.operation)
             condstr = ' and '.join('%s %s %s' % (condition.name, condition.operation, quote(condition.value)) for condition in rule.conditions)
-            print(indent+'if', condstr+':', file=file)
-            print(indent+'    if not forClassName or forClassName == "%s":' % (rule.className,), file=file)
-            print(indent+'        rules.append(Dict(className="%s", cover=%s, ok=%s, text="""%s -> %s"""))'
-                    % (rule.className, rule.cover, rule.ok, condstr, rule.className), file=file)
+            print(indent+'if', condstr+':', end='', file=file)
+            print(' return True', file=file)
+            # print(' return [%i,%i]' % (int(rule.ok), int(rule.cover)), file=file)
+
+            # print(indent+'    if not forClassName or forClassName == "%s":' % (rule.className,), file=file)
+            # print(indent+'        rules.append(Dict(className="%s", cover=%s, ok=%s, text="""%s -> %s"""))'
+                    # % (rule.className, rule.cover, rule.ok, condstr, rule.className), file=file)
             print(file=file)
 
             # old & simple:
@@ -263,8 +297,9 @@ class C5:
         # print(indent+'# default rule:', self.defaultClassName, file=file)
         # print(indent+'if not forClassName or forClassName == "%s":'% (self.defaultClassName,), file=file)
         # print(indent+'    rules.append(Dict(className="%s", cover=0, ok=0, text="default"))'% (self.defaultClassName,), file=file)
-        print(file=file)
-        print(indent+'return rules', file=file)
+        # print(file=file)
+        # print(indent+'return rules', file=file)
+        print(indent+'return False', file=file)
         print(file=file)
 
         # TESTAM, lai redzētu, vai strength kritērijs ir dilstošs
@@ -332,7 +367,8 @@ def blackBox(trainPaths='train/*', features='features', filename='./rules.py', t
     # open rules file for writing
     f = open(filename, 'w')
 
-    import templates
+    import templates2 as templates
+    # import templates3 as templates
 
 
     print(templates.header % features, file=f)
@@ -348,9 +384,9 @@ def blackBox(trainPaths='train/*', features='features', filename='./rules.py', t
 
 
     print('frameTypesWithElementNames = {', file=f)
-    for frameType in frameTypesWithElementNames:
+    for frameType in sorted(frameTypesWithElementNames):
         print('    "'+frameType+'": {', file=f)
-        for frameElementName in frameTypesWithElementNames[frameType]:
+        for frameElementName in sorted(frameTypesWithElementNames[frameType]):
             print('        "'+frameElementName+'",', file=f)
         print('    },', file=f)
     print('}', file=f)
@@ -418,8 +454,8 @@ def blackBox(trainPaths='train/*', features='features', filename='./rules.py', t
         print('generating rules ... ', end='')
         sys.stdout.flush()
 
-        print('def FrameType_', frameType, '(', ', '.join(feature.name for feature in frameTargetFeatures),
-                ', forClassName="YES"):', sep='', file=f)
+        # print('def FrameType_', frameType, '(', ', '.join(feature.name for feature in frameTargetFeatures), ', forClassName="YES"):', sep='', file=f)
+        print('def FrameType_', frameType, '(', ', '.join(feature.name for feature in frameTargetFeatures), '):', sep='', file=f)
         c5.generate(indent=4, file=f)
         print(file=f)
 
@@ -511,6 +547,12 @@ def blackBox(trainPaths='train/*', features='features', filename='./rules.py', t
                                 c5(token=token, tokens=sentence.tokens, elementName=frameElementName,
                                     frame=None, _class=c5.classes[token.index in elementTokenIndices])
 
+                    if mode == 'perframetarget':
+                        for frame in sentence.frames:
+                            for element in frame.elements:
+                                for token in sentence.tokens:
+                                    c5(token=token, tokens=sentence.tokens, elementName=frameElementName,
+                                        frame=frame, _class=c5.classes[token.index == element.tokenIndex and frameElementName == element.name])
 
                     # jaunais variants: iet cauri visiem freimiem
                     if mode == 'new':
@@ -526,7 +568,7 @@ def blackBox(trainPaths='train/*', features='features', filename='./rules.py', t
                                         #     # frame=frame, _class=c5.classes[token.index == element.tokenIndex])
 
                                         for ftoken in sentence.tokens:
-                                            c5(token=token, tokens=sentence.tokens, elementName=frameElementName,
+                                            c5(token=token, tokens=sentence.tokens, elementName=frameElementName, 
                                                 frame=ftoken, _class=c5.classes[token.index == element.tokenIndex and ftoken.index == frame.tokenIndex])
                                             # frame=frame, _class=c5.classes[token.index == element.tokenIndex])
 
@@ -562,8 +604,8 @@ def blackBox(trainPaths='train/*', features='features', filename='./rules.py', t
 
         print('generating rules ... ', end='')
         sys.stdout.flush()
-        print('def FrameElement_', frameElementName, '(', ', '.join(feature.name for feature in frameElementFeatures),
-                ', forClassName="YES"):', sep='', file=f)
+        # print('def FrameElement_', frameElementName, '(', ', '.join(feature.name for feature in frameElementFeatures), ', forClassName="YES"):', sep='', file=f)
+        print('def FrameElement_', frameElementName, '(', ', '.join(feature.name for feature in frameElementFeatures), '):', sep='', file=f)
         c5.generate(indent=4, file=f)
 
         print('ok')
@@ -575,13 +617,13 @@ def blackBox(trainPaths='train/*', features='features', filename='./rules.py', t
     print(file=f)
     print(file=f)
     print('frameTypeFunctions = {}', file=f)
-    for frameType in frameTypesWithElementNames:
+    for frameType in sorted(frameTypesWithElementNames):
         print('frameTypeFunctions["'+frameType+'"] = FrameType_'+frameType+'', file=f)
     print(file=f)
 
 
     print('frameElementFunctions = {}', file=f)
-    for frameElementName in frameElementNames:
+    for frameElementName in sorted(frameElementNames):
         print('frameElementFunctions["'+frameElementName+'"] = FrameElement_'+frameElementName+'', file=f)
     print(file=f)
 
@@ -608,10 +650,79 @@ if 'Darwin-12.5.0-x86_64-i386-64bit' in platform.platform():
 
 
 
-gmode = len(sys.argv) > 1 and sys.argv[1].startswith('g') and sys.argv[1] or ''
+# Summary:
+# - dažādu datu ģenerācijas parametru izvēle
+# - dažādu rules failu šablonu izvēle
+
+# rules failā ir sekojoši šabloni:
+# - head
+# - frames & elements arrays
+# - frame rules
+# - element rules
+# - body
+
+# gmode = len(sys.argv) > 1 and sys.argv[1].startswith('g') and sys.argv[1] or ''
+
+
+
+# TODO: šeit vajag paralelizāciju !!!!
+# tad vajag izmantot vienus un tos pašus treniņdatus, šobrīd tiek padoti ceļi
+
 
 
 trainPaths = ['../SemanticAnalyzer/SemanticData/Corpora/json/parsera_sintakse/*.json', '../SemanticAnalyzer/SemanticData/Corpora/json/manuaala_sintakse/*.json']
+trainPaths = ['./train_reparsed/*/*.json', './train_reparsed/parsera_sintakse/*/*.json']
+
+# compute distances pārbaude
+# import loader
+# print('Loading train data:')
+# for document in loader.loadDocumentsFromPaths(trainPaths, sys.stderr, True):
+#     pass
+# quit()
+
+# blackBox(trainPaths, filename='rulesbig100f4.py', features='features4', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f4', costs=100)
+blackBox(trainPaths, filename='rulesbig100f4.py', features='features4', runC5Targets=False, runC5Elements=True, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f4', costs=100)
+# blackBox(trainPaths, filename='rulesbig100f4.py', features='features4', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f4', costs=100)
+
+
+quit()
+
+# blackBox(trainPaths, filename='rulesbig100f3_2.py', features='features3', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f3', costs=100)
+blackBox(trainPaths, filename='rulesbig100f3_2.py', features='features3', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f3', costs=100)
+
+quit()
+
+# blackBox(trainPaths, filename='rulesbig100f4.py', features='features4', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f4', costs=100)
+blackBox(trainPaths, filename='rulesbig100f4.py', features='features4', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f4', costs=100)
+
+# blackBox(trainPaths, filename='rulesbig200f4.py', features='features4', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig200f4', costs=200)
+blackBox(trainPaths, filename='rulesbig200f4.py', features='features4', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig200f4', costs=200)
+
+# blackBox(trainPaths, filename='rulesbig100f3.py', features='features3', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f3', costs=100)
+# blackBox(trainPaths, filename='rulesbig100f3.py', features='features3', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f3', costs=100)
+# blackBox(trainPaths, filename='rulesbig100f3limit.py', features='features3', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig100f3', costs=100)
+
+# blackBox(trainPaths, filename='rulesbig200f3.py', features='features3', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig200f3', costs=200)
+# blackBox(trainPaths, filename='rulesbig200f3.py', features='features3', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig200f3', costs=200)
+# blackBox(trainPaths, filename='rulesbig200f3limit.py', features='features3', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='perframetarget', tmpdir='tmpbig200f3', costs=200)
+
+# ------------
+
+# blackBox(trainPaths, filename='rulesbig100new.py', features='features2', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='simple', tmpdir='tmpbig100new', costs=100)
+# blackBox(trainPaths, filename='rulesbig100new.py', features='features2', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='simple', tmpdir='tmpbig100new', costs=100)
+
+# blackBox(trainPaths, filename='rulesbig200new.py', features='features2', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='simple', tmpdir='tmpbig200new', costs=200)
+# blackBox(trainPaths, filename='rulesbig200new.py', features='features2', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='simple', tmpdir='tmpbig200new', costs=200)
+
+
+# old
+# blackBox(trainPaths, filename='rulesbig100.py', features='featuresg', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='simple', tmpdir='tmpbig100', costs=100)
+# blackBox(trainPaths, filename='rulesbig100.py', features='featuresg', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='simple', tmpdir='tmpbig100', costs=100)
+
+# blackBox(trainPaths, filename='rulesbig200.py', features='featuresg', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='simple', tmpdir='tmpbig200', costs=200)
+# blackBox(trainPaths, filename='rulesbig200.py', features='featuresg', runC5Targets=False, runC5Elements=False, allSentences=True, command=command, mode='simple', tmpdir='tmpbig200', costs=200)
+
+quit()
 
 
 if gmode:
@@ -624,14 +735,15 @@ if gmode:
                 runC5Targets=True, runC5Elements=True, command=command, mode='simple', allSentences=False)
     if gmode == 'g2':
         blackBox('traing/sum.json', filename='rules'+gmode+'.py', features='featuresg', tmpdir='tmp'+gmode,
-                runC5Targets=True, runC5Elements=True, command=command, mode='simple', allSentences=True)
+                runC5Targets=True, runC5Elements=True, command=command, mode='simple', allSentences=True, costs=100)
     if gmode == 'g3':
         blackBox(trainPaths, filename='rules'+gmode+'.py', features='featuresg', tmpdir='tmp'+gmode,
                 runC5Targets=True, runC5Elements=True, command=command, mode='simple', allSentences=False)
     if gmode == 'g4':
         blackBox(trainPaths, filename='rules'+gmode+'.py', features='featuresg', tmpdir='tmp'+gmode,
                 runC5Targets=True, runC5Elements=True, command=command, mode='simple', allSentences=True)
-    if gmode.endswith('m'):
+    # if gmode.endswith('m'):
+    if 'm' in gmode:
         print("Autogeneration would replace manually tuned, edit by hand please and pipe with ./pipe.py g[...]m")
 else:
     blackBox('traing/sum.json', runC5Targets=True, runC5Elements=True, allSentences=True, command=command, mode='new')

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
 
-header = """#!/usr/bin/env python3
+header = """#!/usr/bin/env python
+# coding=utf-8
+# for Python 2 compatibility
+# convert to unicode strings with vim : % s/"\([^"]*\)"/u"\1"/g
 
 from %s import frameTargetFeatures, frameElementFeatures
 from utils import Dict
