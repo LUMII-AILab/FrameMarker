@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import os
+import os, sys
 import loader
 from utils import Dict
 
@@ -16,6 +16,25 @@ from utils import Dict
 goldDir = 'gold'
 silverDir = 'silver'
 
+args = list(sys.argv[1:])
+if args and args[0] == '--help':
+    print()
+    print('Frame and frame element precision evaluation script.')
+    print()
+    print('Usage:')
+    print(sys.argv[0], '[<gold dir> <silver dir>]')
+    print()
+    print('Note: gold and silver directory should contain filenames with identical names')
+    print()
+    quit()
+if len(args) >= 2:
+    goldDir = args.pop(0)
+    silverDir = args.pop(0)
+
+print()
+print('Gold directory:', goldDir)
+print('Silver directory:', silverDir)
+
 goldFrameCount = 0
 silverFrameCount = 0
 correctFrameCount = 0
@@ -27,6 +46,7 @@ correctElementCount = 0
 paths = list(set(os.path.relpath(path, goldDir) for path in loader.pathIterator2(goldDir))
     & set(os.path.relpath(path, silverDir) for path in loader.pathIterator2(silverDir)))
 
+print('\nMatched documents:\n')
 # for goldPath in loader.pathIterator2(goldDir):
 #     relpath = os.path.relpath(goldPath, goldDir)
 #     silverPath = os.path.join(silverDir, relpath)
@@ -76,6 +96,10 @@ for path in paths:
             matchedSilverFrame = None
             for silverFrame in silverFrames: 
                 if silverFrame.tokenIndex == goldFrame.tokenIndex and silverFrame.type == goldFrame.type:
+                    # drošībai
+                    if goldSentence.tokens[goldFrame.tokenIndex].form != silverSentence.tokens[silverFrame.tokenIndex].form:
+                        print('!!!!!!!!!!!!!!!!!!!!')
+                        quit()
                     matchedSilverFrame = silverFrame
                     matchedFrames.append([goldFrame, silverFrame])
                     correctFrameCount += 1
@@ -96,6 +120,10 @@ for path in paths:
                 matchedSilverElement = None
                 for silverElement in silverElements: 
                     if silverElement.tokenIndex == goldElement.tokenIndex and silverElement.name == goldElement.name:
+                        # drošībai
+                        if goldSentence.tokens[goldElement.tokenIndex].form != silverSentence.tokens[silverElement.tokenIndex].form:
+                            print('!!!!!!!!!!!!!!!!!!!!')
+                            quit()
                         matchedSilverElement = silverElement
                         correctElementCount += 1
                         break
@@ -103,6 +131,7 @@ for path in paths:
                     silverElements.remove(matchedSilverElement)
 
 
+print('\nResults:')
 
 print()
 
