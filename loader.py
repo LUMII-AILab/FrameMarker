@@ -302,7 +302,7 @@ def computeDistances(sentence):
     #     token.distances = travel(token)
 
 
-def prepareSentence(sentence, shouldComputeDistances=False):
+def prepareSentence(sentence, shouldComputeDistances=True):
 
     # add root token if needed
     if len(sentence.tokens) == 0 or sentence.tokens[0].index > 0:
@@ -331,7 +331,11 @@ def cleanSentence(sentence):
         del token.parent
         del token.children
         del token.distances
-        del token.namedEntityType
+        # tīrības dēļ dzēš, lai nav null .jsonā
+        if not token.namedEntityType:
+            del token.namedEntityType  # šis vairs nav jādzēš ārā, tas ir NER tips
+        if not token.idType:
+            del token.idType
         # pārveido pazīmes atpakaļ no Dict struktūras uz stringu name1=value1|name2=value2|...
         if type(token.features) == dict or type(token.features) == Dict:
             token.features = '|'.join('='.join(item) for item in token.features.items())
@@ -447,7 +451,7 @@ def unlinkSentences(sentences):
     for sentence in sentences:
         unlinkSentence(sentence)
 
-def prepareSentences(sentences, shouldComputeDistances=False):
+def prepareSentences(sentences, shouldComputeDistances=True):
     for sentence in sentences:
         prepareSentence(sentence, shouldComputeDistances)
 
@@ -471,8 +475,40 @@ def cleanDocument(document):
     for sentence in document.sentences:
         cleanSentence(sentence)
 
+defaultNamedEntityType = 'O'
+namedEntityTypeMap = {
+    'Being_born': defaultNamedEntityType,
+    'Possession': defaultNamedEntityType,
+    'Hiring': defaultNamedEntityType,
+    'Membership': defaultNamedEntityType,
+    'Employment_end': defaultNamedEntityType,
+    'Trial': defaultNamedEntityType,
+    'Intentionally_create': defaultNamedEntityType,
+    'Being_employed': defaultNamedEntityType,
+    'Lending': defaultNamedEntityType,
+    'Earnings_and_losses': defaultNamedEntityType,
+    'People_by_vocation': defaultNamedEntityType,
+    'Personal_relationship': defaultNamedEntityType,
+    'Product_line': defaultNamedEntityType,
+    'Education_teaching': defaultNamedEntityType,
+    'Residence': defaultNamedEntityType,
+    'Statement': defaultNamedEntityType,
+    'Death': defaultNamedEntityType,
+    'Participation': defaultNamedEntityType,
+    'People_by_age': defaultNamedEntityType,
+    'Win_prize': defaultNamedEntityType,
+    'Change_of_leadership': defaultNamedEntityType,
+    # "person", "organization", "location", "profession", "time", "product", "media", "sum", "event", "O"
+    'Unknown': defaultNamedEntityType,
+    'other': defaultNamedEntityType,
+    'prod': 'product',
+    'prof': 'profession',
+    'org': 'organization',
+    'loc': 'location',
+    'persona': 'person',
+}
 
-def prepareDocument(document, shouldComputeDistances=False):
+def prepareDocument(document, shouldComputeDistances=True):
 
     if not document or type(document) != Dict:
         return
@@ -480,11 +516,23 @@ def prepareDocument(document, shouldComputeDistances=False):
     # link named entity types
     if document.namedEntities:
         namedEntities = document.namedEntities
+
+        # ja named entities atslēgas nav int, tad konvertē uz int
+        for key in list(namedEntities.keys()):
+            if type(key) != int:
+                namedEntity = namedEntities[key]
+                del namedEntities[key]
+                key = int(key)
+                namedEntities[key] = namedEntity
+
         for sentence in document.sentences: 
             for token in sentence.tokens:
                 if token.namedEntityID != None:
                     if token.namedEntityID in namedEntities:
                         token.idType = namedEntities[token.namedEntityID].type
+                        # map old NER names to new
+                        if token.idType in namedEntityTypeMap:
+                            token.idType = namedEntityTypeMap[token.idType]
 
     for sentence in document.sentences: 
 
@@ -555,7 +603,7 @@ def loadDocument(data, shouldComputeDistances=True):
     return document
 
 
-def loadSentences(data, shouldComputeDistances=False):
+def loadSentences(data, shouldComputeDistances=True):
     document = loadDocument(data, shouldComputeDistances)
     if not document:
         return []
@@ -564,7 +612,7 @@ def loadSentences(data, shouldComputeDistances=False):
 
 def loadPredefinedFrameNET(filename='frames.csv', headerline=1):
     frameNET = {}
-    for row in CSV('frames.csv', headerline):
+    for row in CSV(filename, headerline):
         # frameType = row.EN_frame_name
         # elementName = row.EN_role_name
         frameType = row.EN_frame_name or row[1]
